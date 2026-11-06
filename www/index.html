@@ -20,7 +20,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .chip .d{width:12px;height:12px;border-radius:50%}
 .round{pointer-events:auto;flex:none;width:44px;height:44px;border-radius:50%;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.2);font-size:20px;display:flex;align-items:center;justify-content:center}
 /* 지도 위 버튼 */
-#fabs{position:fixed;right:12px;z-index:5;display:flex;flex-direction:column;gap:10px;transition:bottom .25s}
+#fabs{position:fixed;right:12px;bottom:calc(38vh + 12px);z-index:5;display:flex;flex-direction:column;gap:10px;transition:bottom .25s}
 #fabs .round{font-size:22px}
 #banner{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top) + 64px);z-index:6;background:#323232;color:#fff;font-size:13px;padding:7px 12px;border-radius:16px;display:none;max-width:90vw;text-align:center}
 /* 핀 */
@@ -103,7 +103,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 <script src="lib/lib.js"></script>
 <script>
 'use strict';
-const VER='1.1.0';
+const VER='1.2.0';
 const MAPTILER_KEY='GbhUPlWXjGVWjRUp0hTh';
 const PALETTE=['#E53935','#FB8C00','#43A047','#8E24AA','#00ACC1','#6D4C41','#D81B60','#C0CA33','#F4511E','#546E7A','#3949AB','#212121']; // 파란색은 내 위치 전용
 const MODES=[['walking','도보'],['driving','차량'],['two-wheeler','오토바이'],['transit','대중교통']];
@@ -246,21 +246,27 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 $('file').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(f)importFile(f)});
 
 // ---------- 지도 ----------
-let map,loaded=false,fellBack=false;
+let map,loaded=false,fellBack=false,styleOk=false,lastErr='';
+const STYLES=[['STREETS','기본'],['VOYAGER','깔끔'],['DATAVIZ','심플'],['HYBRID','위성']];
+const ST=()=>maptilersdk.MapStyle[S.style||'STREETS']||maptilersdk.MapStyle.STREETS;
 const LG=()=>{const L=maptilersdk.Language;return S.lang==='ko'?L.VISITOR:S.lang==='local'?L.LOCAL:L.VISITOR_ENGLISH};
 const OSM={version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,maxzoom:19,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]};
 function initMap(){
   maptilersdk.config.apiKey=MAPTILER_KEY;
   const m=M(),c=m&&m.places[0];
-  map=new maptilersdk.Map({container:'map',style:maptilersdk.MapStyle.STREETS,language:LG(),
+  map=new maptilersdk.Map({container:'map',style:ST(),language:LG(),
     center:c?[c.lng,c.lat]:[77.209,28.6139],zoom:c?12:4,
     geolocate:false,navigationControl:false,terrainControl:false,scaleControl:false,fullscreenControl:false,projectionControl:false,
     attributionControl:{compact:true}});
   map.on('load',()=>{loaded=true});
-  map.on('error',e=>{if(!loaded&&!fellBack)fallback()});
-  setTimeout(()=>{if(!loaded&&!fellBack)fallback()},12000);
+  map.on('styledata',()=>{if(!fellBack)styleOk=true});
+  // 타일 하나 실패 같은 작은 오류로는 바꾸지 않음. 키 거부(401/403)나 20초 안에 스타일 못 받을 때만 예비 지도
+  map.on('error',e=>{const er=e&&e.error;lastErr=((er&&er.status?er.status+' ':'')+((er&&er.message)||'')).slice(0,120)||'?';
+    if(!styleOk&&!fellBack&&er&&(er.status===401||er.status===403))fallback()});
+  setTimeout(()=>{if(!styleOk&&!fellBack)fallback()},20000);
   map.on('click',()=>{if(sel){sel=null;render();drawSel()}});
 }
+function retryMT(){fellBack=false;styleOk=false;try{map.setStyle(ST());setTimeout(()=>{if(!styleOk&&!fellBack)fallback()},20000)}catch(e){}}
 function fallback(){
   fellBack=true;
   try{map.setStyle(OSM)}catch(e){}
@@ -367,6 +373,7 @@ function render(){
   if(!m){
     $('cnt').textContent='';
     $('list').innerHTML='<div id="empty"><b>My Maps 지도를 불러오세요</b><ol><li>PC My Maps → <b>공유</b> → “링크가 있는 모든 사용자” → 링크 복사</li><li>링크를 폰으로 보내서 복사 (카톡 등)</li><li>아래에 붙여넣기 → 연결</li></ol><input class="inp" id="linkIn0" placeholder="My Maps 공유 링크 붙여넣기"><button class="btn pri" style="width:100%;margin-top:8px" data-a="link0">연결 (자동 업데이트)</button><button class="btn" style="width:100%;margin-top:8px" data-a="import">또는 KMZ 파일 불러오기</button></div>';
+    layoutFabs();
     return;
   }
   const ps=m.places.filter(shown).map(p=>({p,d:dist(p)})).sort((a,b)=>a.d-b.d||a.p.name.localeCompare(b.p.name));
@@ -431,6 +438,7 @@ function renderPanel(){
     m.cats.forEach((c,i)=>{h+='<div class="cat"><div class="n"><span style="color:'+c.color+'">●</span> '+esc(c.name)+'</div><div class="sw">'+
       PALETTE.map(col=>'<button data-ci="'+i+'" data-col="'+col+'" class="'+(c.color.toUpperCase()===col?'on':'')+'" style="background:'+col+'"></button>').join('')+'</div></div>'});
   }
+  h+='<h3>지도 스타일</h3><div class="seg">'+STYLES.map(([k,n])=>'<button data-style="'+k+'" class="'+((S.style||'STREETS')===k&&!fellBack?'on':'')+'">'+n+'</button>').join('')+'</div>'+(fellBack?'<div style="font-size:13px;color:#b45309;margin-top:6px">지금 예비 지도(OpenStreetMap) 사용 중 · 위 스타일을 누르면 다시 시도'+(lastErr?'<br>오류: '+esc(lastErr):'')+'</div>':'');
   h+='<h3>지도 글자</h3><div class="seg">'+LANGS.map(([k,n])=>'<button data-lang="'+k+'" class="'+(S.lang===k?'on':'')+'">'+n+'</button>').join('')+'</div>';
   h+='<div class="tg"><span>다녀온 곳 숨기기</span><button class="btn" style="flex:none;padding:8px 16px" data-a="hv">'+(S.hideVisited?'켜짐':'꺼짐')+'</button></div>';
   if(m)h+='<div class="tg"><span>다녀옴 표시 모두 지우기</span><button class="btn" style="flex:none;padding:8px 16px" data-a="clrv">지우기</button></div>';
@@ -445,6 +453,7 @@ $('panel').addEventListener('click',e=>{
   if(d.del){const x=S.maps[d.del];if(confirm('“'+x.name+'” 지도를 삭제할까요? (My Maps 원본은 그대로)')){delete S.maps[d.del];if(S.cur===d.del)S.cur=Object.keys(S.maps)[0]||null;sel=null;save();drawPins();render();renderPanel()}return}
   if(d.mode){S.mode=d.mode;save();render();renderPanel();return}
   if(d.ci!==undefined){M().cats[+d.ci].color=d.col;save();drawPins();render();renderPanel();return}
+  if(d.style){S.style=d.style;save();retryMT();setTimeout(renderPanel,300);return}
   if(d.lang){S.lang=d.lang;save();try{if(!fellBack)map.setLanguage(LG())}catch(err){}renderPanel();return}
   if(d.a==='hv'){S.hideVisited=!S.hideVisited;save();drawPins();render();renderPanel();return}
   if(d.a==='clrv'){if(confirm('다녀옴 표시를 모두 지울까요?')){M().visited={};save();drawPins();render()}return}
