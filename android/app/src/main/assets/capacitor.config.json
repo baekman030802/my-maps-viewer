@@ -1,0 +1,8 @@
+{
+	"appId": "com.jimin.mymaps",
+	"appName": "내 지도",
+	"webDir": "www",
+	"android": {
+		"appendUserAgent": "MyMapsViewer/1.0"
+	}
+}

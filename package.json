@@ -1,0 +1,14 @@
+{
+  "name": "my-maps-viewer",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app-launcher": "8.0.1",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/geolocation": "8.2.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}
